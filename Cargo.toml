@@ -1,10 +1,12 @@
 [package]
-name = "msg-extractor"
+name = "msg-attachment-extractor"
 version = "0.1.0"
-authors = ["lau"]
+authors = ["LauH"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ole = "0.1.15"
+regex = "1.3.7"
+byteorder = "1.3.4"
