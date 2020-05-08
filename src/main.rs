@@ -1,16 +1,18 @@
 use byteorder::{ByteOrder, LittleEndian};
 use ole;
+use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use lazy_static::lazy_static;
 
 fn main() {
 
     // TODO: Add command line arguments to set msg path
     let file =
-        std::fs::File::open("/home/lau/IdeaProjects/Rust/msg-attachment-extractor/resources/unicode.msg")
+        std::fs::File::open("./resources/unicode.msg")
             .unwrap();
-    let parser = ole::Reader::new(file).unwrap();
+    let parser = Reader::new(file).unwrap();
 
     let attachment_entries = parser
         .iterate()
@@ -19,35 +21,22 @@ fn main() {
     let attachment_children = attachment_entries.map(|e| e.children_nodes());
 
     let attachments = attachment_children
-        .map(|v| {
-            parser
-                .iterate()
-                .filter(|e| v.contains(&e.id()) && e.name().contains("_37"))
-                .filter_map(|e| {
-                    let re = Regex::new(r"^__.*\.0_(37..).*").unwrap();
-                    let name = re.captures_iter(e.name()).next();
-                    if let Some(capture) = name {
-                        Some((capture[1].to_string(), e))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<HashMap<_, _>>()
-        })
-        .map(|e| {
-            let short_filename = e.get("3704").map(|e| {
+        .map(|att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
+                                                                             //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
+        .map(|map| {
+            let short_filename = map.get("3704").map(|e| {
                 let vec_u8 = read_entry_to_vec(&parser, *e);
                 let vec_u16 = u8_to_16_vec(&vec_u8);
                 String::from_utf16(&vec_u16).unwrap()
             });
 
-            let long_filename = e.get("3707").map(|e| {
+            let long_filename = map.get("3707").map(|e| {
                 let vec_u8 = read_entry_to_vec(&parser, *e);
                 let vec_u16 = u8_to_16_vec(&vec_u8);
                 String::from_utf16(&vec_u16).unwrap()
             });
 
-            let data = e
+            let data = map
                 .get("3701")
                 .map(|e| read_entry_to_vec(&parser, *e))
                 .unwrap();
@@ -70,13 +59,38 @@ fn main() {
     }
 }
 
+/// Takes a list of children of an attachment Entry and returns a hashmap where each child
+/// is mapped to a it's corresponding attachment property type code (see http://www.fileformat.info/format/outlookmsg/).
+/// For attachments in an msg-file these all start with 0_37
+fn children_to_att_code_map<'a>(parser: &'a Reader, att_children: &[u32]) -> HashMap<String, &'a Entry> {
+    parser
+        .iterate()
+        .filter(|e| att_children.contains(&e.id()) && e.name().contains("_37"))
+        .filter_map(|e| extract_attachment_code(e))
+        .collect::<HashMap<_, _>>()
+}
+
+/// Extracts the 4 digit attachment property code starting with 37
+/// if no 37-code is matched returns None
+fn extract_attachment_code(e: &Entry) -> Option<(String, &Entry)> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"^__.*\.0_(37..).*").unwrap();
+    }
+    let name = RE.captures_iter(e.name()).next();
+    if let Some(capture) = name {
+        Some((capture[1].to_string(), e))
+    } else {
+        None
+    }
+}
+
 struct Attachment {
     short_filename: Option<String>,
     long_filename: Option<String>,
     data: Vec<u8>,
 }
 
-fn read_entry_to_vec(parser: &ole::Reader, e: &ole::Entry) -> Vec<u8> {
+fn read_entry_to_vec(parser: &Reader, e: &Entry) -> Vec<u8> {
     let slice = parser.get_entry_slice(e).unwrap();
     slice.bytes().collect::<Result<Vec<u8>, _>>().unwrap()
 }

@@ -32,6 +32,7 @@ name = "msg-attachment-extractor"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+ "lazy_static",
  "ole",
  "regex",
 ]
