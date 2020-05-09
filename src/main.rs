@@ -1,17 +1,16 @@
 use byteorder::{ByteOrder, LittleEndian};
+use lazy_static::lazy_static;
 use ole;
 use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use lazy_static::lazy_static;
+use std::path::PathBuf;
+use structopt::StructOpt;
 
 fn main() {
-
-    // TODO: Add command line arguments to set msg path
-    let file =
-        std::fs::File::open("./resources/unicode.msg")
-            .unwrap();
+    let options = Options::from_args();
+    let file = std::fs::File::open(options.msg_file).unwrap();
     let parser = Reader::new(file).unwrap();
 
     let attachment_entries = parser
@@ -62,7 +61,10 @@ fn main() {
 /// Takes a list of children of an attachment Entry and returns a hashmap where each child
 /// is mapped to a it's corresponding attachment property type code (see http://www.fileformat.info/format/outlookmsg/).
 /// For attachments in an msg-file these all start with 0_37
-fn children_to_att_code_map<'a>(parser: &'a Reader, att_children: &[u32]) -> HashMap<String, &'a Entry> {
+fn children_to_att_code_map<'a>(
+    parser: &'a Reader,
+    att_children: &[u32],
+) -> HashMap<String, &'a Entry> {
     parser
         .iterate()
         .filter(|e| att_children.contains(&e.id()) && e.name().contains("_37"))
@@ -95,9 +97,17 @@ fn read_entry_to_vec(parser: &Reader, e: &Entry) -> Vec<u8> {
     slice.bytes().collect::<Result<Vec<u8>, _>>().unwrap()
 }
 
-fn u8_to_16_vec(slice: &[u8]) -> Vec<u16>{
+fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
     slice
         .chunks_exact(2)
         .map(|e| LittleEndian::read_u16(e))
         .collect::<Vec<_>>()
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "Options")]
+struct Options {
+    /// File to process
+    #[structopt(parse(from_os_str))]
+    msg_file: PathBuf,
 }
