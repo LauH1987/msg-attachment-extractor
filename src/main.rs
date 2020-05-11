@@ -5,12 +5,12 @@ use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 use structopt::StructOpt;
 
 fn main() {
     let options = Options::from_args();
-    let file = std::fs::File::open(options.msg_file).unwrap();
+    let file = File::open(options.msg_file).unwrap();
     let parser = Reader::new(file).unwrap();
 
     let attachment_entries = parser
@@ -53,7 +53,7 @@ fn main() {
             .as_ref()
             .unwrap_or_else(|| a.short_filename.as_ref().unwrap());
 
-        let mut extracted_file = std::fs::File::create(format!("./{}", filename)).unwrap();
+        let mut extracted_file = File::create(format!("./{}", filename)).unwrap();
         extracted_file.write_all(&a.data);
     }
 }
