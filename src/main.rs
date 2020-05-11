@@ -67,20 +67,20 @@ fn children_to_att_code_map<'a>(
 ) -> HashMap<String, &'a Entry> {
     parser
         .iterate()
-        .filter(|e| att_children.contains(&e.id()) && e.name().contains("_37"))
-        .filter_map(|e| extract_attachment_code(e))
+        .filter(|entry| att_children.contains(&entry.id()) && entry.name().contains("_37"))
+        .filter_map(|entry| extract_attachment_code(entry).map(|code| (code, entry)))
         .collect::<HashMap<_, _>>()
 }
 
 /// Extracts the 4 digit attachment property code starting with 37
 /// if no 37-code is matched returns None
-fn extract_attachment_code(e: &Entry) -> Option<(String, &Entry)> {
+fn extract_attachment_code(e: &Entry) -> Option<String> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"^__.*\.0_(37..).*").unwrap();
     }
     let name = RE.captures_iter(e.name()).next();
     if let Some(capture) = name {
-        Some((capture[1].to_string(), e))
+        Some(capture[1].to_string())
     } else {
         None
     }
