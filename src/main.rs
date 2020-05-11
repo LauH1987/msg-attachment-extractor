@@ -79,11 +79,7 @@ fn extract_attachment_code(e: &Entry) -> Option<String> {
         static ref RE: Regex = Regex::new(r"^__.*\.0_(37..).*").unwrap();
     }
     let name = RE.captures_iter(e.name()).next();
-    if let Some(capture) = name {
-        Some(capture[1].to_string())
-    } else {
-        None
-    }
+    name.map(|capture| capture[1].to_string())
 }
 
 struct Attachment {
