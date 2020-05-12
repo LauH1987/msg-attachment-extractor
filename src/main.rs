@@ -17,7 +17,7 @@ fn main() {
         .iterate()
         .filter(|entry| entry.name().starts_with("__attach"));
 
-    let attachment_children = attachment_entries.map(|e| e.children_nodes());
+    let attachment_children = attachment_entries.map(Entry::children_nodes);
 
     let attachments = attachment_children
         .map(|att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
