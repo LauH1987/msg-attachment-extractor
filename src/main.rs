@@ -10,7 +10,7 @@ use structopt::StructOpt;
 
 fn main() {
     let options = Options::from_args();
-    let file = File::open(options.msg_file).unwrap();
+    let file = File::open(&options.msg_file).unwrap();
     let parser = Reader::new(file).unwrap();
 
     let attachment_entries = parser
@@ -53,7 +53,9 @@ fn main() {
             .as_ref()
             .unwrap_or_else(|| a.short_filename.as_ref().unwrap());
 
-        let mut extracted_file = File::create(format!("./{}", filename)).unwrap();
+        let prefix: String = if options.prefix_filename {options.msg_file.file_name().unwrap().to_string_lossy().into_owned()} else {String::from("")};
+
+        let mut extracted_file = File::create(format!("./{} {}", prefix, filename)).unwrap();
         extracted_file.write_all(&a.data);
     }
 }
@@ -103,6 +105,10 @@ fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "Options")]
 struct Options {
+    /// Prefix attachment filename with name of the msg-file
+    #[structopt(long = "prefix")]
+    prefix_filename: bool,
+
     /// File to process
     #[structopt(parse(from_os_str))]
     msg_file: PathBuf,
