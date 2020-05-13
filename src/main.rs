@@ -6,6 +6,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::{
+    borrow::Cow,
     env,
     fs::create_dir_all,
     fs::File,
@@ -97,12 +98,18 @@ impl Attachment {
                 .expect("No long or short filename for attachment")
         });
 
+        let prefix: Option<Cow<str>> = if options.prefix_filename {
+            Some(options.msg_file.file_name().unwrap().to_string_lossy())
+        } else {
+            None
+        };
 
-        let prefix: String = if options.prefix_filename {options.msg_file.file_name().unwrap().to_string_lossy().into_owned()} else {String::from("")};
+        let filename: Cow<str> = match prefix {
+            Some(prefix) => format!("{} {}", prefix, filename).into(),
+            None => filename.into(),
+        };
 
-        let filename = format!("{}{}", prefix, filename);
-
-        let mut extracted_file = File::create(dir.as_ref().join(filename))?;
+        let mut extracted_file = File::create(dir.as_ref().join(filename.as_ref()))?;
         extracted_file.write_all(&self.data)
     }
 }
