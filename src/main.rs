@@ -5,12 +5,17 @@ use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::{fs::File, path::PathBuf};
+use std::{
+    env,
+    fs::create_dir_all,
+    fs::File,
+    path::{Path, PathBuf},
+};
 use structopt::StructOpt;
 
 fn main() {
     let options = Options::from_args();
-    let file = File::open(options.msg_file).unwrap();
+    let file = File::open(&options.msg_file).unwrap();
     let parser = Reader::new(file).unwrap();
 
     let attachment_entries = parser
@@ -47,8 +52,10 @@ fn main() {
             }
         });
 
+    let dir = get_or_create_dir(&options);
+
     for a in attachments {
-        a.write_to_file().unwrap();
+        a.write_to_file(&dir).unwrap();
     }
 }
 
@@ -83,13 +90,33 @@ struct Attachment {
 }
 
 impl Attachment {
-    fn write_to_file(&self) -> std::io::Result<()> {
-        let filename: &str = self
-            .long_filename
-            .as_ref()
-            .unwrap_or_else(|| self.short_filename.as_ref().expect("No long or short filename for attachment"));
-        let mut extracted_file = File::create(format!("./{}", filename))?;
+    fn write_to_file<P: AsRef<Path>>(&self, dir: P) -> std::io::Result<()> {
+        let filename: &str = self.long_filename.as_ref().unwrap_or_else(|| {
+            self.short_filename
+                .as_ref()
+                .expect("No long or short filename for attachment")
+        });
+
+        let mut extracted_file = File::create(dir.as_ref().join(filename))?;
         extracted_file.write_all(&self.data)
+    }
+}
+
+/// Create and return subdirectory if option is on else return current dir
+fn get_or_create_dir(options: &Options) -> PathBuf {
+    if options.subfolder {
+        let mut dir = env::current_dir().unwrap();
+        let msg_name_stem = options
+            .msg_file
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        dir.push(msg_name_stem);
+        create_dir_all(&dir).unwrap();
+        dir
+    } else {
+        env::current_dir().unwrap()
     }
 }
 
@@ -108,6 +135,10 @@ fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "Options")]
 struct Options {
+    /// Put extracted attachment in a subfolder with the name of the msg-file
+    #[structopt(long)]
+    subfolder: bool,
+
     /// File to process
     #[structopt(parse(from_os_str))]
     msg_file: PathBuf,
