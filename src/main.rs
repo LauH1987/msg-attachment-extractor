@@ -48,13 +48,7 @@ fn main() {
         });
 
     for a in attachments {
-        let filename: &str = a
-            .long_filename
-            .as_ref()
-            .unwrap_or_else(|| a.short_filename.as_ref().unwrap());
-
-        let mut extracted_file = File::create(format!("./{}", filename)).unwrap();
-        extracted_file.write_all(&a.data);
+        a.write_to_file().unwrap();
     }
 }
 
@@ -86,6 +80,17 @@ struct Attachment {
     short_filename: Option<String>,
     long_filename: Option<String>,
     data: Vec<u8>,
+}
+
+impl Attachment {
+    fn write_to_file(&self) -> std::io::Result<()> {
+        let filename: &str = self
+            .long_filename
+            .as_ref()
+            .unwrap_or_else(|| self.short_filename.as_ref().expect("No long or short filename for attachment"));
+        let mut extracted_file = File::create(format!("./{}", filename))?;
+        extracted_file.write_all(&self.data)
+    }
 }
 
 fn read_entry_to_vec(parser: &Reader, e: &Entry) -> Vec<u8> {
