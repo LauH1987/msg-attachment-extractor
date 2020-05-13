@@ -97,6 +97,11 @@ impl Attachment {
                 .expect("No long or short filename for attachment")
         });
 
+
+        let prefix: String = if options.prefix_filename {options.msg_file.file_name().unwrap().to_string_lossy().into_owned()} else {String::from("")};
+
+        let filename = format!("{}{}", prefix, filename);
+
         let mut extracted_file = File::create(dir.as_ref().join(filename))?;
         extracted_file.write_all(&self.data)
     }
@@ -135,6 +140,10 @@ fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "Options")]
 struct Options {
+    /// Prefix attachment filename with name of the msg-file
+    #[structopt(long = "prefix")]
+    prefix_filename: bool,
+
     /// Put extracted attachment in a subfolder with the name of the msg-file
     #[structopt(long)]
     subfolder: bool,
