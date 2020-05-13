@@ -55,7 +55,7 @@ fn main() {
     let dir = get_or_create_dir(&options);
 
     for a in attachments {
-        a.write_to_file(&dir).unwrap();
+        a.write_to_file(&options, &dir).unwrap();
     }
 }
 
@@ -90,7 +90,7 @@ struct Attachment {
 }
 
 impl Attachment {
-    fn write_to_file<P: AsRef<Path>>(&self, dir: P) -> std::io::Result<()> {
+    fn write_to_file<P: AsRef<Path>>(&self, options: &Options, dir: P) -> std::io::Result<()> {
         let filename: &str = self.long_filename.as_ref().unwrap_or_else(|| {
             self.short_filename
                 .as_ref()
@@ -138,7 +138,7 @@ fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "Options")]
+#[structopt(name = "msg-attachment-extractor")]
 struct Options {
     /// Prefix attachment filename with name of the msg-file
     #[structopt(long = "prefix")]
