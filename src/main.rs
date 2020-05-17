@@ -19,16 +19,26 @@ fn main() {
     let file = File::open(&options.msg_file).unwrap();
     let parser = Reader::new(file).unwrap();
 
+    let attachments = get_attachments(&parser);
+
+    let dir = get_or_create_dir(&options);
+
+    for a in attachments {
+        a.write_to_file(&options, &dir).unwrap();
+    }
+}
+
+fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Attachment> + 'a {
     let attachment_entries = parser
         .iterate()
         .filter(|entry| entry.name().starts_with("__attach"));
 
     let attachment_children = attachment_entries.map(Entry::children_nodes);
 
-    let attachments = attachment_children
-        .map(|att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
-                                                                             //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
-        .map(|map| {
+    attachment_children
+        .map(move |att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
+                                                                                             //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
+        .map(move |map| {
             let short_filename = map.get("3704").map(|e| {
                 let vec_u8 = read_entry_to_vec(&parser, *e);
                 let vec_u16 = u8_to_16_vec(&vec_u8);
@@ -51,13 +61,7 @@ fn main() {
                 long_filename,
                 data,
             }
-        });
-
-    let dir = get_or_create_dir(&options);
-
-    for a in attachments {
-        a.write_to_file(&options, &dir).unwrap();
-    }
+        })
 }
 
 /// Takes a list of children of an attachment Entry and returns a hashmap where each child
