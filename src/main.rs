@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use lazy_static::lazy_static;
-use ole;
 use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
@@ -32,6 +31,8 @@ fn main() -> Result<()> {
 }
 
 fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Result<Attachment>> + 'a {
+    let id_map: HashMap<u32, &Entry> = parser.iterate().map(|entry| (entry.id(), entry)).collect();
+
     let attachment_entries = parser
         .iterate()
         .filter(|entry| entry.name().starts_with("__attach"));
@@ -39,8 +40,7 @@ fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Result<Attach
     let attachment_children = attachment_entries.map(Entry::children_nodes);
 
     attachment_children
-        .map(move |att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
-                                                                                  //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
+        .map(move |att_children| children_to_att_code_map(&id_map, att_children))
         .map(move |map| {
             let short_filename: Option<String> = map
                 .get("3704")
@@ -78,13 +78,13 @@ fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Result<Attach
 /// is mapped to a it's corresponding attachment property type code (see http://www.fileformat.info/format/outlookmsg/).
 /// For attachments in an msg-file these all start with 0_37
 fn children_to_att_code_map<'a>(
-    parser: &'a Reader,
+    id_map: &HashMap<u32, &'a Entry>,
     att_children: &[u32],
 ) -> HashMap<String, &'a Entry> {
-    parser
-        .iterate()
-        .filter(|entry| att_children.contains(&entry.id()) && entry.name().contains("_37"))
-        .filter_map(|entry| extract_attachment_code(entry).map(|code| (code, entry)))
+    att_children
+        .iter()
+        .map(|id| id_map.get(id).unwrap())
+        .filter_map(|&entry| extract_attachment_code(entry).map(|code| (code, entry)))
         .collect::<HashMap<_, _>>()
 }
 
