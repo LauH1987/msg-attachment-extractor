@@ -123,18 +123,19 @@ impl Attachment {
             None => filename.into(),
         };
 
+        let err_context = || format!("Failed to write file: {}", filename);
+
         let mut extracted_file = BufWriter::new(
-            File::create(dir.as_ref().join(filename.as_ref()))
-                .with_context(|| format!("Failed to write file: {}", filename))?,
+            File::create(dir.as_ref().join(filename.as_ref())).with_context(err_context)?,
         );
 
         extracted_file
             .write_all(&self.data)
-            .with_context(|| format!("Failed to write file: {}", filename))?;
+            .with_context(err_context)?;
 
         extracted_file
             .flush()
-            .with_context(|| format!("Failed to write file: {}", filename))
+            .with_context(err_context)
             .map_err(From::from)
     }
 }
