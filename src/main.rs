@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use lazy_static::lazy_static;
 use ole;
@@ -14,21 +15,23 @@ use std::{
 };
 use structopt::StructOpt;
 
-fn main() {
+fn main() -> Result<()> {
     let options = Options::from_args();
-    let file = File::open(&options.msg_file).unwrap();
-    let parser = Reader::new(file).unwrap();
+    let file = File::open(&options.msg_file)?;
+    let parser = Reader::new(file)?;
 
     let attachments = get_attachments(&parser);
 
-    let dir = get_or_create_dir(&options);
+    let dir = get_or_create_dir(&options)?;
 
     for a in attachments {
-        a.write_to_file(&options, &dir).unwrap();
+        a?.write_to_file(&options, &dir)?;
     }
+
+    Ok(())
 }
 
-fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Attachment> + 'a {
+fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Result<Attachment>> + 'a {
     let attachment_entries = parser
         .iterate()
         .filter(|entry| entry.name().starts_with("__attach"));
@@ -37,30 +40,37 @@ fn get_attachments<'a>(parser: &'a Reader) -> impl Iterator<Item = Attachment> +
 
     attachment_children
         .map(move |att_children| children_to_att_code_map(&parser, att_children)) // TODO: This design is inefficient as is does multiple passes over the entire file.
-                                                                                             //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
+                                                                                  //       Maybe improve by making one hashmap with multiple keys using multi-map: One key for IDs and one key for property type code
         .map(move |map| {
-            let short_filename = map.get("3704").map(|e| {
-                let vec_u8 = read_entry_to_vec(&parser, *e);
-                let vec_u16 = u8_to_16_vec(&vec_u8);
-                String::from_utf16(&vec_u16).unwrap()
-            });
+            let short_filename: Option<String> = map
+                .get("3704")
+                .map::<Result<String>, _>(|e| {
+                    let vec_u8 = read_entry_to_vec(&parser, *e)?;
+                    let vec_u16 = u8_to_16_vec(&vec_u8);
+                    String::from_utf16(&vec_u16).map_err(From::from)
+                })
+                .transpose()?;
 
-            let long_filename = map.get("3707").map(|e| {
-                let vec_u8 = read_entry_to_vec(&parser, *e);
-                let vec_u16 = u8_to_16_vec(&vec_u8);
-                String::from_utf16(&vec_u16).unwrap()
-            });
+            let long_filename: Option<String> = map
+                .get("3707")
+                .map::<Result<String>, _>(|e| {
+                    let vec_u8 = read_entry_to_vec(&parser, *e)?;
+                    let vec_u16 = u8_to_16_vec(&vec_u8);
+                    String::from_utf16(&vec_u16).map_err(From::from)
+                })
+                .transpose()?;
 
             let data = map
                 .get("3701")
                 .map(|e| read_entry_to_vec(&parser, *e))
+                .transpose()?
                 .unwrap();
 
-            Attachment {
+            Ok(Attachment {
                 short_filename,
                 long_filename,
                 data,
-            }
+            })
         })
 }
 
@@ -95,7 +105,7 @@ struct Attachment {
 }
 
 impl Attachment {
-    fn write_to_file<P: AsRef<Path>>(&self, options: &Options, dir: P) -> std::io::Result<()> {
+    fn write_to_file<P: AsRef<Path>>(&self, options: &Options, dir: P) -> Result<()> {
         let filename: &str = self.long_filename.as_ref().unwrap_or_else(|| {
             self.short_filename
                 .as_ref()
@@ -113,15 +123,21 @@ impl Attachment {
             None => filename.into(),
         };
 
-        let mut extracted_file = File::create(dir.as_ref().join(filename.as_ref()))?;
-        extracted_file.write_all(&self.data)
+        // TODO: USE BUFFERED WRITER
+        let mut extracted_file = File::create(dir.as_ref().join(filename.as_ref()))
+            .with_context(|| format!("Failed to write file: {}", filename))?;
+
+        extracted_file
+            .write_all(&self.data)
+            .with_context(|| format!("Failed to write file: {}", filename))
+            .map_err(From::from)
     }
 }
 
 /// Create and return subdirectory if option is on else return current dir
-fn get_or_create_dir(options: &Options) -> PathBuf {
+fn get_or_create_dir(options: &Options) -> Result<PathBuf> {
     if options.subfolder {
-        let mut dir = env::current_dir().unwrap();
+        let mut dir = env::current_dir()?;
         let msg_name_stem = options
             .msg_file
             .file_stem()
@@ -129,16 +145,19 @@ fn get_or_create_dir(options: &Options) -> PathBuf {
             .to_string_lossy()
             .into_owned();
         dir.push(msg_name_stem);
-        create_dir_all(&dir).unwrap();
-        dir
+        create_dir_all(&dir)?;
+        Ok(dir)
     } else {
-        env::current_dir().unwrap()
+        env::current_dir().map_err(From::from)
     }
 }
 
-fn read_entry_to_vec(parser: &Reader, e: &Entry) -> Vec<u8> {
-    let slice = parser.get_entry_slice(e).unwrap();
-    slice.bytes().collect::<Result<Vec<u8>, _>>().unwrap()
+fn read_entry_to_vec(parser: &Reader, e: &Entry) -> Result<Vec<u8>> {
+    let slice = parser.get_entry_slice(e)?;
+    slice
+        .bytes()
+        .collect::<Result<Vec<u8>, _>>()
+        .map_err(From::from)
 }
 
 fn u8_to_16_vec(slice: &[u8]) -> Vec<u16> {
