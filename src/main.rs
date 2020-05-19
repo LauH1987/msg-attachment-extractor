@@ -5,7 +5,7 @@ use ole;
 use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::{
     borrow::Cow,
     env,
@@ -123,12 +123,17 @@ impl Attachment {
             None => filename.into(),
         };
 
-        // TODO: USE BUFFERED WRITER
-        let mut extracted_file = File::create(dir.as_ref().join(filename.as_ref()))
-            .with_context(|| format!("Failed to write file: {}", filename))?;
+        let mut extracted_file = BufWriter::new(
+            File::create(dir.as_ref().join(filename.as_ref()))
+                .with_context(|| format!("Failed to write file: {}", filename))?,
+        );
 
         extracted_file
             .write_all(&self.data)
+            .with_context(|| format!("Failed to write file: {}", filename))?;
+
+        extracted_file
+            .flush()
             .with_context(|| format!("Failed to write file: {}", filename))
             .map_err(From::from)
     }
