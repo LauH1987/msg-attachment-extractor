@@ -5,6 +5,7 @@ USAGE:
     msg-attachment-extractor [FLAGS] <msg-file>
 
 FLAGS:
+        --overwrite    Overwrite extracted files of same filename
         --prefix       Prefix attachment filename with name of the msg-file
         --subfolder    Put extracted attachment in a subfolder with the name of the msg-file
 
