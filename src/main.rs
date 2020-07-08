@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use ole::{Entry, Reader};
 use regex::Regex;
 use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::io::{BufWriter, Read, Write};
 use std::{
     borrow::Cow,
@@ -125,9 +126,13 @@ impl Attachment {
 
         let err_context = || format!("Failed to write file: {}", filename);
 
-        let mut extracted_file = BufWriter::new(
-            File::create(dir.as_ref().join(filename.as_ref())).with_context(err_context)?,
-        );
+        let file = if options.overwrite {
+            File::create(dir.as_ref().join(filename.as_ref())).with_context(err_context)?
+        } else {
+            create_unique_file(dir, &filename, None)
+        };
+
+        let mut extracted_file = BufWriter::new(file);
 
         extracted_file
             .write_all(&self.data)
@@ -137,6 +142,34 @@ impl Attachment {
             .flush()
             .with_context(err_context)
             .map_err(From::from)
+    }
+}
+
+fn create_unique_file<P: AsRef<Path>>(dir: P, filename: &str, num: Option<u32>) -> File {
+    let filename_new: Cow<str> = match num {
+        None => filename.into(),
+        Some(i) => {
+            let filename: &Path = filename.as_ref();
+            let stem = filename
+                .file_stem()
+                .map(|s| s.to_string_lossy())
+                .unwrap_or_else(|| "".into());
+            let ext = filename
+                .extension()
+                .map(|s| s.to_string_lossy())
+                .unwrap_or_else(|| "".into());
+            format!("{}_{}.{}", stem, i, ext).into()
+        }
+    };
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(dir.as_ref().join(filename_new.as_ref()));
+
+    match file {
+        Ok(file) => file,
+        Err(_) => create_unique_file(dir, filename, Some(num.unwrap_or(0) + 1)),
     }
 }
 
@@ -183,6 +216,10 @@ struct Options {
     /// Put extracted attachment in a subfolder with the name of the msg-file
     #[structopt(long)]
     subfolder: bool,
+
+    /// Overwrite extracted files of same filename
+    #[structopt(long)]
+    overwrite: bool,
 
     /// File to process
     #[structopt(parse(from_os_str))]
